@@ -1,14 +1,12 @@
 # Publishes Quiet Home releases from the private source repo (hasrya/Firestick-personal-launcher).
-# Hourly: the newest tag on each channel (vX.Y.Z stable, vX.Y.Z-beta beta), if not yet published.
-# Run workflow: a version from the tip of main (stable) or beta. Runs .github/publish.sh.
+# Run workflow: a version from the tip of main (stable) or beta, or (no version) the newest tag on
+# each channel (vX.Y.Z stable, vX.Y.Z-beta beta) if not yet published. Runs .github/publish.sh.
 #
 # Needs the secret SOURCE_KEY: the private half of a read-only deploy key on the source repo.
 # Run logs are public: nothing here prints source files.
 name: Publish
 
 on:
-  schedule:
-    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       version:
