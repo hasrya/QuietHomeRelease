@@ -1,0 +1,89 @@
+# Publishes Quiet Home releases from the private source repo (hasrya/Firestick-personal-launcher).
+# Hourly: the newest tag on each channel (vX.Y.Z stable, vX.Y.Z-beta beta), if not yet published.
+# Run workflow: a version from the tip of main (stable) or beta. Runs .github/publish.sh.
+#
+# Needs the secret SOURCE_KEY: the private half of a read-only deploy key on the source repo.
+# Run logs are public: nothing here prints source files.
+name: Publish
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version, e.g. 2.0.5 (folder release/v2.0.5). Empty: newest tag on each channel"
+        required: false
+      channel:
+        description: "Channel (for a version)"
+        type: choice
+        options: [stable, beta]
+        default: stable
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out this repo
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          git init -q rel
+          cd rel
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git config http.https://github.com/.extraheader \
+            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git fetch -q origin "+refs/heads/main:refs/remotes/origin/main"
+          git checkout -q -B main origin/main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch the source repo
+        env:
+          SOURCE_KEY: ${{ secrets.SOURCE_KEY }}
+        run: |
+          [ -n "$SOURCE_KEY" ] || { echo "::error::The secret SOURCE_KEY isn't set"; exit 1; }
+          install -d -m 700 ~/.ssh
+          # drop carriage returns, spaces at line ends and blank lines a paste can add
+          printf '%s\n' "$SOURCE_KEY" | tr -d '\r' | sed 's/[[:space:]]*$//; /^$/d' > ~/.ssh/source_key
+          chmod 600 ~/.ssh/source_key
+          if [ "$(head -n1 ~/.ssh/source_key)" != "-----BEGIN OPENSSH PRIVATE KEY-----" ]; then
+            if grep -q '^ssh-ed25519 ' ~/.ssh/source_key; then
+              echo "::error::SOURCE_KEY holds the public key (.pub). Paste the private key file instead"
+            else
+              echo "::error::SOURCE_KEY doesn't start with -----BEGIN OPENSSH PRIVATE KEY-----. Paste the whole private key file"
+            fi
+            exit 1
+          fi
+          tail -n1 ~/.ssh/source_key | grep -qx -- "-----END OPENSSH PRIVATE KEY-----" \
+            || { echo "::error::SOURCE_KEY is cut short (no END line). Paste the whole private key file"; exit 1; }
+          ssh-keygen -y -P "" -f ~/.ssh/source_key >/dev/null 2>&1 \
+            || { echo "::error::SOURCE_KEY can't be read: damaged, or it has a passphrase (it must have none)"; exit 1; }
+          # github.com's Ed25519 host key, as published by GitHub (SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU)
+          echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > ~/.ssh/github_host
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/source_key -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/github_host -o StrictHostKeyChecking=yes"
+          git clone -q --filter=blob:none --no-checkout git@github.com:hasrya/Firestick-personal-launcher.git src \
+            || { echo "::error::Can't read the source repo: is SOURCE_KEY's public half a deploy key on it?"; exit 1; }
+          # later checkouts fetch file contents on demand
+          echo "GIT_SSH_COMMAND=$GIT_SSH_COMMAND" >> "$GITHUB_ENV"
+
+      - name: Publish
+        env:
+          IN_VERSION: ${{ inputs.version }}
+          IN_CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -o pipefail
+          if [ -n "$IN_VERSION" ]; then
+            rel/.github/publish.sh "$PWD/src" "$IN_VERSION" "$IN_CHANNEL" | tee out.txt
+          else
+            rel/.github/publish.sh "$PWD/src" | tee out.txt
+          fi
+          { echo "### Publish"; echo; sed 's/^/    /' out.txt; } >> "$GITHUB_STEP_SUMMARY"
