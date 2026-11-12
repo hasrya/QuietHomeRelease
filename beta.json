@@ -1,8 +1,8 @@
 {
-  "version": "2.0.5",
-  "versionCode": 27,
-  "folder": "v2.0.5",
-  "apkSha256": "bc0bb4ed56ac1a5cf5b5fd145c99419a253fd28bb6c3fe01f0729e04e973c970",
+  "version": "3.0.0",
+  "versionCode": 28,
+  "folder": "v3.0.0",
+  "apkSha256": "f916275c82a936e1710a839a3c5d3a51b1ba364a506e3e10fd39fc51d088c134",
   "apkSize": 185175,
   "setupSha256": "e66168c3d012cb9fd49742916f18df9974d940c314a442d1be8e4f2957f1f7bb",
   "undoSha256": "3b352251b7475e10706634fbfaa7c0d101b239d7546e554fa7688cc856c3a45c"
